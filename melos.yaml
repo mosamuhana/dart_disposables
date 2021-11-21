@@ -4,7 +4,6 @@ packages:
   - packages/**
 
 scripts:
-
   analyze:
     run: |
       flutter pub global run melos exec -c 1 --ignore="*example*" -- \
@@ -46,16 +45,34 @@ scripts:
     select-package:
       dir-exists: test
 
-  refresh:
-    run: |
-      flutter pub global run melos run clean && \
-      flutter pub global run melos run get
-    description: Clear all possible things
-
   clean:
     run: flutter pub global run melos exec -c 1 flutter clean
     description: Clear all packages
 
-  get:
-    run: flutter pub global run melos exec -c 1 flutter pub get
-    description:  Get all packages
+  pub:get:
+    run: |
+      flutter pub global run melos exec -c 1 --fail-fast -- \
+      flutter pub get
+    description: pub get for all packages
+
+  pub:packages:upgrade:
+    run: |
+      flutter pub global run melos exec -c 1 --fail-fast -- \
+      flutter packages upgrade
+    description: |
+      Update packages cache to update git dependencies.
+      Don't forget to increase version number in updated packages
+
+  pub:publish:dry-run:
+    run: |
+      flutter pub global run melos exec -c 5 --no-private -- \
+            pub publish --dry-run
+    description: |
+      Dry-run publish packages to pub dev
+
+  pub:publish:
+    run: |
+      flutter pub global run melos exec -c 5 --no-private -- \
+            pub publish
+    description: |
+      Publish packages to pub dev
