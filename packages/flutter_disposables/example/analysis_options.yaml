@@ -1,9 +1,0 @@
-include: package:flutter_lints/flutter.yaml
-
-linter:
-  rules:
-    avoid_print: false
-    # prefer_single_quotes: true
-    mixin_inherits_from_not_object: false
-
-

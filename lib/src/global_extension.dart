@@ -33,16 +33,17 @@ extension GlobalExtension<T extends Object> on T {
 
 Function _getFunc(dynamic obj) {
   print('runtimeType: "${obj.runtimeType}"');
-  print(obj.cancel);
-  if (obj.cancel is Function) {
+  print('obj.cancel: ${obj?.cancel}');
+  print('obj.cancel: ${obj?.dispose}');
+  if (obj?.cancel != null && obj.cancel is Function) {
     print('has cancel');
     return obj.cancel;
   }
-  if (obj.dispose is Function) {
+  if (obj?.dispose != null && obj?.dispose is Function) {
     print('has dispose');
     return obj.dispose;
   }
-  throw 'Target object not have dispose or cancel';
+  throw DisposeException.custom('Target object not have dispose or cancel');
 }
 
 typedef _VoidFunc = void Function();

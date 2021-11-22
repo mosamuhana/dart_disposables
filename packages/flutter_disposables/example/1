@@ -1,6 +1,0 @@
-Package melos is currently active at version 0.4.11+2.
-Resolving dependencies...
-The package melos is already activated at newest available version.
-To recompile executables, first run `global deactivate melos`.
-Installed executable melos.
-Activated melos 0.4.11+2.
