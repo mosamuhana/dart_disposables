@@ -31,60 +31,48 @@ import 'package:flutter_disposables/flutter_disposables.dart';
 2. Convert instance to disposable
 
 ```dart
+// create DisposableBag which is responsible for disposing
+// all disposables added to it when DisposableBag.dispose() called
+final bag = DisposableBag();
+
 // You can convert StreamSubscription, StreamController, Timer and so on.
-final streamDisposable = stream.listen((v) => {}).asDisposable();
-final timerDisposable = timer.asDisposable();
-
-// create SyncDisposableBag which is responsible for disposing
-// all disposables add to it when DisposableBag.dispose() called
-final syncBag = DisposableBag.sync();
-
-syncBag.add(streamDisp);
-syncBag.add(timerDisp);
+final streamDisposable = stream.listen((v) => {}).disposable;
+final timerDisposable = timer.disposable;
+Timer.periodic(const Duration(seconds: 1), (t) => print('timer.tick: ${t.tick}'))
+        .disposeBy(bag);
+// or add it to bag
+bag.add(streamDisposable);
+bag.add(timerDisposable);
 
 // later at last to free resources added to the bag use
-syncBag.dispose();
+await asyncBag.dispose();
 ```
 
-3. To dispose
+3. Dispose them!
 
 ```dart
-final bag = DisposableBag();
-bag.add(streamDisp);
-bag.add(timerDisp);
-```
+// Without DisposableBag
+await streamDisposable.dispose();
+timerDisposable.dispose();
 
-Or you can add disposable directly
-```dart
-stream.listen((v) => {}).disposeWith(bag);
-timer.disposeWith(bag);
-```
-
-4. Dispose them!
-
-```dart
-// Without DisposeBag
-await streamDisp.dispose();
-timerDisp.dispose();
-
-// With DisposeBag
+// With DisposableBag
 await bag.dispose();
 ```
 
 ### For Flutter
-flutter_disposing adds Listenable extension methods and DisposableBagStateMixin class.
+flutter_disposables adds extension methods and DisposableStateMixin class.
 
 #### Listenable
 Listenable is a base class of ChangeNotifier which is used by TextEditingController, FocusNode, ValueNotifier and many other flutter classes.
 
 Use `addDisposableListener` to adds a listener function and returns disposable instance.
 ```dart
-final controller = TextEditingController();
-final disp = controller.addDisposableListener(() => print(controller.text));
+final bag = DisposableBag();
+final controller = TextEditingController().disposeBy(bag);
 ```
 
-#### DisposableBagStateMixin
-This mixin adds `disposeBag` variable and dispose it when the widget's state is being disposed.
+#### DisposableStateMixin
+This mixin uses `DisposableBag` to dispose it when the widget's state is being disposed.
 
 ```dart
 class ExampleWidget extends StatefulWidget {
@@ -94,33 +82,40 @@ class ExampleWidget extends StatefulWidget {
   _ExampleWidgetState createState() => _ExampleWidgetState();
 }
 
-class _ExampleWidgetState extends State<ExampleWidget>
-    with DisposableBagStateMixin {
-  final controller = TextEditingController();
+class _ExampleWidgetState extends State<ExampleWidget> with DisposableStateMixin {
+  late final TextEditingController controller;
+  String currentTime = '';
 
   @override
   void initState() {
-    autoDispose(Timer.periodic(Duration(seconds: 1), (t) => {}).asDisposable());
-    autoDispose(controller.addDisposableListener(() => print(controller.text)));
-    autoDispose(controller.asDisposable());
+    controller = TextEditingController().disposeBy(this);
+    Timer.periodic(const Duration(seconds: 1), (t) {
+      print('timer.tick: ${t.tick}');
+      var now = DateTime.now();
+      setState(() {
+        currentTime = '${now.hour}:${now.minute}:${now.second}';
+      });
+    }).disposeBy(this);
+
     super.initState();
   }
 
   @override
   Widget build(BuildContext context) {
-    return TextField(
-      controller: controller,
+    return Scaffold(
+      appBar: AppBar(title: const Text('Disbosable Example 1')),
+      body: Center(
+        child: Column(
+          children: [
+            Text('Current: $currentTime'),
+            const SizedBox(height: 20),
+            TextField(
+              controller: controller,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
-```
-
-### using
-`using` is an utility method which will dispose disposable instance automatically after the callback execution is finished (like [C# using statement](https://docs.microsoft.com/en-us/dotnet/csharp/language-reference/keywords/using-statement)).
-
-```dart
-await using(someDisposable, (disposable) async {
-  // do something...
-});
-assert(someDisposable.isDisposed, true);
 ```

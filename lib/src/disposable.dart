@@ -1,6 +1,6 @@
 part of disposables;
 
-class Disposable<T extends Object> {
+class Disposable<T> {
   final bool _isAsync;
   final T? _source;
   final _VoidFunc? _syncFunc;
@@ -17,7 +17,7 @@ class Disposable<T extends Object> {
 
   Disposable<T> asAsync() {
     if (_isAsync) return this;
-    return Disposable.async(_source, () async => _syncDispose());
+    return Disposable.create(() async => _syncDispose(), _source);
   }
 
   Disposable<T> disposeBy(dynamic disposer) {
@@ -43,18 +43,19 @@ class Disposable<T extends Object> {
         _syncFunc = syncFunc,
         _asyncFunc = asyncFunc;
 
-  Disposable.sync(T? source, _VoidFunc func)
-      : this._(
-          source: source,
-          syncFunc: func,
-        );
-
-  Disposable.async(T? source, _AsyncVoidFunc func)
-      : this._(
-          isAsync: true,
-          source: source,
-          asyncFunc: func,
-        );
+  static Disposable<T> create<T>(FutureOr<void> Function() func, [T? source]) {
+    final isAsync = func is _AsyncVoidFunc;
+    final isSync = func is _VoidFunc;
+    if (!isAsync && !isSync) {
+      throw DisposeException.custom('Argument func must be of return type void or Future<void>');
+    }
+    return Disposable._(
+      source: source,
+      isAsync: isAsync,
+      asyncFunc: isAsync ? func as _AsyncVoidFunc : null,
+      syncFunc: isAsync ? null : func as _VoidFunc,
+    );
+  }
 
   Future<void> _asyncDispose() async {
     if (_isDisposing || _isDisposed) return;
@@ -109,6 +110,24 @@ class Disposable<T extends Object> {
     return '$runtimeType' + (a.isEmpty ? '' : ' (' + a.join(', ') + ')');
   }
 
-  static DisposableBag createSyncBag() => _SyncDisposableBag._();
-  static DisposableBag createAsyncBag() => _AsyncDisposableBag._();
+  static Future<R> usingValue<T, R>(Disposable disposable, FutureOr<R> Function(T) body) =>
+      using(disposable, (_) => body(disposable.source));
+
+  static Future<R> using<T extends Disposable, R>(T value, FutureOr<R> Function(T) body) async {
+    if (value.isAsync) {
+      value.throwIfNotAvailable();
+      try {
+        return await body(value);
+      } finally {
+        await value.dispose();
+      }
+    } else {
+      value.throwIfNotAvailable();
+      try {
+        return await body(value);
+      } finally {
+        value.dispose();
+      }
+    }
+  }
 }
