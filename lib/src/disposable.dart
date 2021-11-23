@@ -1,164 +1,114 @@
-import 'dart:async';
+part of disposables;
 
-import 'exceptions.dart';
+class Disposable<T extends Object> {
+  final bool _isAsync;
+  final T? _source;
+  final _VoidFunc? _syncFunc;
+  final _AsyncVoidFunc? _asyncFunc;
 
-abstract class Disposable {
-  bool get isDisposed;
-  //bool get isDisposing;
-  void dispose();
-  //bool get isAsync => this is AsyncDisposable;
-
-  bool get isAsync;
-
-  void throwIfNotAvailable([String? target]) {
-    if (isDisposed) {
-      throw DisposeException.disposed(this, target);
-    }
-  }
-
-  static Future<R> usingValue<T, R>(AsyncValueDisposable<T> disposable, _Body<T, R> body) =>
-      using(disposable, (_) => body(disposable.value));
-
-  static Future<R> using<T extends Disposable, R>(T value, _Body<T, R> body) async {
-    if (value is SyncDisposable) {
-      value.throwIfNotAvailable();
-      try {
-        return await body(value);
-      } finally {
-        value.dispose();
-      }
-    } else if (value is AsyncDisposable) {
-      value.throwIfNotAvailable();
-      try {
-        return await body(value);
-      } finally {
-        await value.dispose();
-      }
-    } else {
-      throw DisposeException.unknown(value);
-    }
-  }
-
-  static SyncCallbackDisposable callback(_VoidCallback callback) =>
-      SyncCallbackDisposable._(callback);
-
-  static AsyncCallbackDisposable asyncCallback(_AsyncVoidCallback callback) =>
-      AsyncCallbackDisposable._(callback);
-
-  static SyncValueDisposable<T> value<T>(T value, _VoidCallback callback) =>
-      SyncValueDisposable<T>._(value, callback);
-
-  static AsyncValueDisposable<T> asyncValue<T>(T value, _AsyncVoidCallback callback) =>
-      AsyncValueDisposable<T>._(value, callback);
-}
-
-abstract class AsyncDisposable extends Disposable {
   bool _isDisposing = false;
   bool _isDisposed = false;
 
-  @override
-  bool get isAsync => true;
-
+  bool get isAsync => _isAsync;
   bool get isDisposing => _isDisposing;
-
-  @override
   bool get isDisposed => _isDisposed;
 
-  @override
-  Future<void> dispose();
+  T? get source => _source;
 
-  @override
-  String toString() =>
-      '$runtimeType' + (isDisposing ? ' (disposing)' : (isDisposed ? ' (disposed)' : ''));
-
-  @override
-  void throwIfNotAvailable([String? target]) {
-    if (isDisposing) {
-      throw DisposeException.disposing(this, target);
-    }
-    if (isDisposed) {
-      throw DisposeException.disposed(this, target);
-    }
+  Disposable<T> asAsync() {
+    if (_isAsync) return this;
+    return Disposable.async(_source, () async => _syncDispose());
   }
-}
 
-abstract class SyncDisposable extends Disposable {
-  bool _isDisposed = false;
+  Disposable<T> disposeBy(dynamic disposer) {
+    if (disposer is DisposableBag) {
+      disposer.add(this);
+    } else if (disposer is DisposableMixin) {
+      disposer.autoDispose(this);
+    } else {
+      throw DisposeException.custom(
+        'Argument disposer must be DisposableBag or DisposableBagMixinBase',
+      );
+    }
+    return this;
+  }
 
-  @override
-  bool get isAsync => false;
+  Disposable._({
+    bool isAsync = false,
+    T? source,
+    _VoidFunc? syncFunc,
+    _AsyncVoidFunc? asyncFunc,
+  })  : _isAsync = isAsync,
+        _source = source,
+        _syncFunc = syncFunc,
+        _asyncFunc = asyncFunc;
 
-  @override
-  bool get isDisposed => _isDisposed;
+  Disposable.sync(T? source, _VoidFunc func)
+      : this._(
+          source: source,
+          syncFunc: func,
+        );
 
-  @override
-  void dispose();
+  Disposable.async(T? source, _AsyncVoidFunc func)
+      : this._(
+          isAsync: true,
+          source: source,
+          asyncFunc: func,
+        );
 
-  @override
-  String toString() => '$runtimeType' + (isDisposed ? ' (disposed)' : '');
-}
-
-class AsyncCallbackDisposable extends AsyncDisposable {
-  final _AsyncVoidCallback _callback;
-
-  AsyncCallbackDisposable._(this._callback);
-
-  @override
-  Future<void> dispose() async {
-    if (_isDisposed || _isDisposing) return;
+  Future<void> _asyncDispose() async {
+    if (_isDisposing || _isDisposed) return;
 
     _isDisposing = true;
     try {
-      await _callback();
+      await _asyncFunc!();
       _isDisposed = true;
     } finally {
       _isDisposing = false;
     }
   }
-}
 
-class AsyncValueDisposable<T> extends AsyncCallbackDisposable {
-  final T value;
-
-  AsyncValueDisposable._(this.value, _AsyncVoidCallback _callback) : super._(_callback);
-
-  @override
-  String toString() {
-    var text = '$runtimeType ($value';
-    if (isDisposing) {
-      text += ', disposing';
-    }
-    if (isDisposed) {
-      text += ', disposed';
-    }
-    text += ')';
-    return text;
-  }
-}
-
-class SyncCallbackDisposable extends SyncDisposable {
-  final _VoidCallback _callback;
-
-  SyncCallbackDisposable._(this._callback);
-
-  @override
-  void dispose() {
+  void _syncDispose() {
     if (!_isDisposed) {
-      _callback();
+      _syncFunc!();
       _isDisposed = true;
     }
   }
-}
 
-class SyncValueDisposable<T> extends SyncCallbackDisposable {
-  final T value;
+  FutureOr<void> dispose() async {
+    if (_isAsync) {
+      await _asyncDispose();
+    } else {
+      _syncDispose();
+    }
+  }
 
-  SyncValueDisposable._(this.value, _VoidCallback _callback) : super._(_callback);
+  void throwIfNotAvailable([String? info]) {
+    if (isDisposing) {
+      throw DisposeException.disposing(this, info);
+    }
+    if (isDisposed) {
+      throw DisposeException.disposed(this, info);
+    }
+  }
 
   @override
-  String toString() => '$runtimeType ($value' + (isDisposed ? ', disposed)' : ')');
-}
+  String toString() {
+    String? state;
+    if (isDisposing) {
+      state = 'disposing';
+    }
+    if (isDisposed) {
+      state = 'disposed';
+    }
 
-typedef _Body<T, R> = FutureOr<R> Function(T);
-typedef _VoidCallback = void Function();
-typedef _AsyncVoidCallback = FutureOr<void> Function();
+    final a = <String>[
+      if (_source != null) 'source: $_source',
+      if (state != null) 'state: $state',
+    ];
+    return '$runtimeType' + (a.isEmpty ? '' : ' (' + a.join(', ') + ')');
+  }
+
+  static DisposableBag createSyncBag() => _SyncDisposableBag._();
+  static DisposableBag createAsyncBag() => _AsyncDisposableBag._();
+}

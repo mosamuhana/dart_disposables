@@ -1,10 +1,9 @@
-import 'dart:async';
-
-import 'disposable.dart';
-import 'exceptions.dart';
+part of disposables;
 
 abstract class DisposableBag extends Iterable<Disposable> {
   final _disposables = <Disposable>[];
+
+  FutureOr<void> dispose();
 
   bool get isAsync;
 
@@ -40,26 +39,22 @@ abstract class DisposableBag extends Iterable<Disposable> {
 
   void throwIfNotAvailable([String? target]);
 
-  //void addCallback(void Function() callback);
-
-  static SyncDisposableBag sync() => SyncDisposableBag._();
-  static AsyncDisposableBag async() => AsyncDisposableBag._();
+  //static DisposableBag sync() => _SyncDisposableBag._();
+  //static DisposableBag async() => _AsyncDisposableBag._();
 }
 
-class AsyncDisposableBag extends DisposableBag implements AsyncDisposable {
-  late final AsyncCallbackDisposable _disposable;
+class _AsyncDisposableBag extends DisposableBag {
+  late final Disposable _disposable;
 
-  AsyncDisposableBag._() {
-    _disposable = Disposable.asyncCallback(_disposeInternal);
+  _AsyncDisposableBag._() {
+    _disposable = Disposable.async(null, _disposeFunc);
   }
 
   @override
   bool get isAsync => true;
 
-  @override
   bool get isDisposing => _disposable.isDisposing;
 
-  @override
   bool get isDisposed => _disposable.isDisposed;
 
   @override
@@ -69,13 +64,13 @@ class AsyncDisposableBag extends DisposableBag implements AsyncDisposable {
   //void addCallback(FutureOr<void> Function() callback) => add(Disposable.asyncCallback(callback));
 
   @override
-  Future<void> dispose() => _disposable.dispose();
+  Future<void> dispose() async => await _disposable.dispose();
 
-  Future<void> _disposeInternal() async {
+  Future<void> _disposeFunc() async {
     final Map<Disposable, Object> map = {};
     for (final d in _disposables) {
       try {
-        if (d is AsyncDisposable) {
+        if (d.isAsync) {
           await d.dispose();
         } else {
           d.dispose();
@@ -91,35 +86,31 @@ class AsyncDisposableBag extends DisposableBag implements AsyncDisposable {
   }
 }
 
-class SyncDisposableBag extends DisposableBag implements SyncDisposable {
-  late final SyncCallbackDisposable _disposable;
+class _SyncDisposableBag extends DisposableBag {
+  late final Disposable _disposable;
 
-  SyncDisposableBag._() {
-    _disposable = Disposable.callback(_disposeInternal);
+  _SyncDisposableBag._() {
+    _disposable = Disposable.sync(null, _disposeFunc);
   }
 
   @override
   bool get isAsync => false;
 
-  @override
   bool get isDisposed => _disposable.isDisposed;
 
   @override
   void throwIfNotAvailable([String? target]) => _disposable.throwIfNotAvailable(target);
 
-  //@override
-  //void addCallback(void Function() callback) => add(Disposable.callback(callback));
-
   @override
   void dispose() => _disposable.dispose();
 
-  void _disposeInternal() {
+  void _disposeFunc() {
     final Map<Disposable, Object> map = {};
-    for (final disposable in _disposables) {
+    for (final d in _disposables) {
       try {
-        disposable.dispose();
+        d.dispose();
       } on Object catch (e) {
-        map[disposable] = e;
+        map[d] = e;
       }
     }
 
@@ -129,11 +120,4 @@ class SyncDisposableBag extends DisposableBag implements SyncDisposable {
       throw DisposeException.aggregate(map);
     }
   }
-}
-
-abstract class DisposableBagMixinBase {
-  bool get isDisposing;
-  void dispose();
-  void autoDispose(Disposable disposable);
-  void autoDisposeCallback(FutureOr<void> Function() callback);
 }

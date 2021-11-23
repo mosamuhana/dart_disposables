@@ -1,4 +1,4 @@
-import 'disposable.dart';
+part of disposables;
 
 class DisposeException implements Exception {
   final String message;

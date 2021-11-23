@@ -1,90 +1,36 @@
-import 'dart:async';
-
-import 'disposable_bag.dart';
-import 'disposable.dart';
-
-typedef _VoidFunc = void Function();
-typedef _AsyncVoidFunc = Future<void> Function();
+part of disposables;
 
 extension DisposableBagExtension on DisposableBag {
   DisposableBag addCallback(FutureOr<void> Function() callback) {
     if (callback is _VoidFunc) {
-      add(Disposable.callback(callback));
+      Disposable.sync(null as dynamic, callback).disposeBy(this);
     } else if (callback is _AsyncVoidFunc) {
-      add(Disposable.asyncCallback(callback));
+      Disposable.async(null as dynamic, callback).disposeBy(this);
     }
     return this;
   }
 }
 
-extension SyncDisposableExtension on SyncDisposable {
-  AsyncDisposable asAsync() => Disposable.asyncCallback(() async => dispose());
-}
-
-extension DisposableExtension on Disposable {
-  Disposable disposeOn(DisposableBag bag) {
-    bag.add(this);
-    return this;
-  }
-
-  Disposable disposeBy(DisposableBagMixinBase m) {
-    m.autoDispose(this);
-    return this;
-  }
-}
-
 extension StreamSubscriptionExtension<T> on StreamSubscription<T> {
-  AsyncDisposable asDisposable() => Disposable.asyncValue(this, cancel);
+  Disposable get disposable => Disposable.async(this, cancel);
 
-  StreamSubscription<T> disposeOn(DisposableBag bag) {
-    bag.add(asDisposable());
-    return this;
-  }
-
-  StreamSubscription<T> disposeBy(DisposableBagMixinBase m) {
-    m.autoDispose(asDisposable());
-    return this;
-  }
+  StreamSubscription<T> disposeBy(dynamic disposer) => this..disposable.disposeBy(disposer);
 }
 
 extension StreamControllerExtension<T> on StreamController<T> {
-  AsyncDisposable asDisposable() => Disposable.asyncValue(this, close);
+  Disposable get disposable => Disposable.async(this, close);
 
-  StreamController<T> disposeOn(AsyncDisposableBag bag) {
-    bag.add(asDisposable());
-    return this;
-  }
-
-  StreamController<T> disposeBy(DisposableBagMixinBase m) {
-    m.autoDispose(asDisposable());
-    return this;
-  }
+  StreamController<T> disposeBy(dynamic disposer) => this..disposable.disposeBy(disposer);
 }
 
 extension TimerExtension on Timer {
-  SyncDisposable asDisposable() => Disposable.value(this, cancel);
+  Disposable get disposable => Disposable.sync(this, cancel);
 
-  Timer disposeOn(DisposableBag bag) {
-    bag.add(asDisposable());
-    return this;
-  }
-
-  Timer disposeBy(DisposableBagMixinBase m) {
-    m.autoDispose(asDisposable());
-    return this;
-  }
+  Timer disposeBy(dynamic disposer) => this..disposable.disposeBy(disposer);
 }
 
 extension SinkExtension<T> on Sink<T> {
-  SyncDisposable asDisposable() => Disposable.value(this, close);
+  Disposable get disposable => Disposable.sync(this, close);
 
-  Sink<T> disposeOn(DisposableBag bag) {
-    bag.add(asDisposable());
-    return this;
-  }
-
-  Sink<T> disposeBy(DisposableBagMixinBase m) {
-    m.autoDispose(asDisposable());
-    return this;
-  }
+  Sink<T> disposeBy(dynamic disposer) => this..disposable.disposeBy(disposer);
 }
